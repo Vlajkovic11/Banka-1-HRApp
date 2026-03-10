@@ -239,7 +239,12 @@ public class MainStage extends Stage {
 
         gradeBtn.setDisable(true);
         taskTable.getSelectionModel().selectedItemProperty()
-                .addListener((obs, old, selected) -> gradeBtn.setDisable(selected == null));
+                .addListener((obs, old, selected) -> {
+                    boolean notGradeable = selected == null
+                            || selected.getStatus() == com.example.model.TaskStatus.PENDING
+                            || selected.getStatus() == com.example.model.TaskStatus.FAILED;
+                    gradeBtn.setDisable(notGradeable);
+                });
 
         addBtn.setOnAction(e    -> handleAddTask());
         editBtn.setOnAction(e   -> handleEditTask());

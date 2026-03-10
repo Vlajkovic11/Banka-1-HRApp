@@ -225,7 +225,9 @@ public class TeamMemberService {
             }
 
             double memberAvg = taskDTOs.stream()
-                    .filter(t -> t.getStatus() == com.example.model.TaskStatus.COMPLETED && t.getGrade() > 0)
+                    .filter(t -> (t.getStatus() == com.example.model.TaskStatus.COMPLETED
+                            || t.getStatus() == com.example.model.TaskStatus.FAILED)
+                            && t.getGrade() > 0)
                     .mapToInt(TaskDTO::getGrade)
                     .average()
                     .orElse(0);

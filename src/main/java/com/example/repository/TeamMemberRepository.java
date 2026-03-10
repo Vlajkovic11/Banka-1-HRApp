@@ -194,7 +194,8 @@ public class TeamMemberRepository {
                 .collect(Collectors.toList());
 
         double memberAvg = taskDTOs.stream()
-                .filter(t -> t.getStatus() == TaskStatus.COMPLETED && t.getGrade() > 0)
+                .filter(t -> (t.getStatus() == TaskStatus.COMPLETED || t.getStatus() == TaskStatus.FAILED)
+                        && t.getGrade() > 0)
                 .mapToInt(TaskDTO::getGrade)
                 .average()
                 .orElse(0);

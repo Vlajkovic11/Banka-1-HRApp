@@ -6,6 +6,7 @@ import com.example.dto.TaskDTO;
 import com.example.exception.HRAppException;
 import com.example.exception.ValidationException;
 import com.example.model.Task;
+import com.example.model.TaskStatus;
 import com.example.repository.GradeRepository;
 import com.example.repository.TaskRepository;
 import com.example.repository.TransactionManager;
@@ -84,9 +85,22 @@ public class TaskService {
             Task task = new Task(dto.getTaskName());
             task.setComment(dto.getComment());
             task.setStatus(dto.getStatus());
-            taskRepo.save(task, memberId);
+            if (dto.getStatus() == TaskStatus.FAILED) {
+                transactionManager.beginTransaction();
+                try {
+                    taskRepo.save(task, memberId);
+                    gradeRepo.saveOrUpdate(AppConfig.getGradeMin(), task.getId());
+                    transactionManager.commit();
+                } catch (SQLException e) {
+                    transactionManager.rollback();
+                    throw e;
+                }
+            } else {
+                taskRepo.save(task, memberId);
+            }
+            int grade = dto.getStatus() == TaskStatus.FAILED ? AppConfig.getGradeMin() : 0;
             log.info("Added task '{}' to member id={}", dto.getTaskName(), memberId);
-            return new TaskDTO(task.getId(), task.getTaskName(), task.getStatus(), task.getComment(), 0);
+            return new TaskDTO(task.getId(), task.getTaskName(), task.getStatus(), task.getComment(), grade);
         } catch (SQLException e) {
             log.error("Failed to add task for member id={}", memberId, e);
             throw new HRAppException("Failed to add task.", e);
@@ -107,7 +121,19 @@ public class TaskService {
             task.setId(taskId);
             task.setComment(dto.getComment());
             task.setStatus(dto.getStatus());
-            taskRepo.update(task);
+            if (dto.getStatus() == TaskStatus.FAILED) {
+                transactionManager.beginTransaction();
+                try {
+                    taskRepo.update(task);
+                    gradeRepo.saveOrUpdate(AppConfig.getGradeMin(), taskId);
+                    transactionManager.commit();
+                } catch (SQLException e) {
+                    transactionManager.rollback();
+                    throw e;
+                }
+            } else {
+                taskRepo.update(task);
+            }
             log.info("Updated task id={}", taskId);
             int grade = gradeRepo.findByTaskId(taskId);
             return new TaskDTO(task.getId(), task.getTaskName(), task.getStatus(), task.getComment(), grade);
@@ -147,6 +173,14 @@ public class TaskService {
                     "Grade must be between " + AppConfig.getGradeMin() + " and " + AppConfig.getGradeMax() + ".");
         }
         try {
+            Task task = taskRepo.findById(taskId)
+                    .orElseThrow(() -> new HRAppException("Task not found: id=" + taskId));
+            if (task.getStatus() == TaskStatus.PENDING) {
+                throw new ValidationException("Cannot grade a pending task.");
+            }
+            if (task.getStatus() == TaskStatus.FAILED) {
+                throw new ValidationException("Cannot change the grade of a failed task.");
+            }
             gradeRepo.saveOrUpdate(grade, taskId);
             log.info("Graded task id={} with grade={}", taskId, grade);
         } catch (SQLException e) {

@@ -109,6 +109,30 @@ public class TaskRepository {
      * @return list of tasks (without a {@link com.example.model.TeamMember} reference)
      * @throws SQLException on database error
      */
+    /**
+     * Returns a single non-deleted task by ID.
+     *
+     * @param taskId the task's database ID
+     * @return an {@link java.util.Optional} containing the task, or empty if not found
+     * @throws SQLException on database error
+     */
+    public java.util.Optional<Task> findById(long taskId) throws SQLException {
+        String sql = "SELECT id, task_name, comment, status FROM tasks WHERE id = ? AND is_deleted = 0";
+        try (PreparedStatement ps = dbManager.getConnection().prepareStatement(sql)) {
+            ps.setLong(1, taskId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    Task task = new Task(rs.getString("task_name"));
+                    task.setId(rs.getLong("id"));
+                    task.setComment(rs.getString("comment"));
+                    task.setStatus(TaskStatus.valueOf(rs.getString("status")));
+                    return java.util.Optional.of(task);
+                }
+            }
+        }
+        return java.util.Optional.empty();
+    }
+
     public List<Task> findByMemberId(long memberId) throws SQLException {
         String sql = "SELECT id, task_name, comment, status FROM tasks WHERE member_id = ? AND is_deleted = 0 ORDER BY id";
         List<Task> tasks = new ArrayList<>();
