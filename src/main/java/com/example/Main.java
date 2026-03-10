@@ -54,7 +54,7 @@ public class Main extends Application {
 
         // ── Services ─────────────────────────────────────────────────────────
         TeamMemberService memberService = new TeamMemberService(memberRepo, taskRepo, skillRepo, gradeRepo, txManager);
-        TaskService       taskService   = new TaskService(taskRepo, txManager);
+        TaskService       taskService   = new TaskService(taskRepo, gradeRepo, txManager);
 
         // ── View ─────────────────────────────────────────────────────────────
         MainStage mainStage = new MainStage(memberService, taskService);

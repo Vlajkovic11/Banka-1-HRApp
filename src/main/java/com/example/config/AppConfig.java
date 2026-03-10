@@ -4,16 +4,19 @@ import java.io.*;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Properties;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Central application configuration.
  * All configurable values are defined here — no hardcoded values elsewhere in the codebase.
  * <p>
- * The SQLite database file ({@code hrapp.db}) is stored in the current working directory
- * so it can easily be located, backed up, and shared with colleagues.
+ * The SQLite database file ({@code hrapp.db}) is stored in the user's home directory
+ * so it persists reliably across different working directories.
  */
 public final class AppConfig {
 
+    private static final Logger log = LoggerFactory.getLogger(AppConfig.class);
     private static final String PROPERTIES_FILE = "app.properties";
     private static final Properties props = new Properties();
 
@@ -22,21 +25,21 @@ public final class AppConfig {
 
         if(file.exists()){
 
-            try {
-                InputStream input = new FileInputStream(file);
+            try (InputStream input = new FileInputStream(file)) {
                 props.load(input);
             } catch (IOException e) {
-                throw new RuntimeException(e);
+                log.error("Failed to load configuration from '{}': {}", PROPERTIES_FILE, e.getMessage(), e);
+                throw new RuntimeException("Failed to load configuration from '" + PROPERTIES_FILE + "'", e);
             }
         }else{
 
             setDefaultProps();
 
-            try{
-                OutputStream output = new FileOutputStream(file);
+            try (OutputStream output = new FileOutputStream(file)) {
                 props.store(output, "Default properties configuration");
             } catch (IOException e) {
-                throw new RuntimeException(e);
+                log.error("Failed to write default configuration to '{}': {}", PROPERTIES_FILE, e.getMessage(), e);
+                throw new RuntimeException("Failed to write default configuration to '" + PROPERTIES_FILE + "'", e);
             }
 
             System.out.println(PROPERTIES_FILE + " created with default values.");
@@ -45,7 +48,7 @@ public final class AppConfig {
     }
 
     private static void setDefaultProps() {
-        props.setProperty("db.url", "jdbc:sqlite:hrapp.db");
+        props.setProperty("db.url", "jdbc:sqlite:" + System.getProperty("user.home") + "/hrapp.db");
 
         props.setProperty("log.dir", System.getProperty("user.home") + "/hrapp-logs");
 

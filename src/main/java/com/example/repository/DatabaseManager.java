@@ -82,6 +82,7 @@ public class DatabaseManager {
             }
             log.info("Database connection opened.");
         } catch (SQLException e) {
+            log.error("Failed to open database connection to '{}': {}", AppConfig.getDbUrl(), e.getMessage(), e);
             throw new RuntimeException("Failed to open database connection", e);
         }
     }
@@ -91,7 +92,7 @@ public class DatabaseManager {
      *
      * @return the {@link Connection} to the SQLite database
      */
-    public Connection getConnection() {
+    public synchronized Connection getConnection() {
         try{
             if (connection == null || !connection.isValid(5)) {
 

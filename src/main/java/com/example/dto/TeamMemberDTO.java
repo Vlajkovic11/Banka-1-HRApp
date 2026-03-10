@@ -7,6 +7,8 @@ import java.util.List;
 /**
  * Read-only data transfer object representing a team member with all related data.
  * Used to pass member data from the service layer to the view layer.
+ * <p>
+ * Average grade is calculated as the average of grades across completed tasks only.
  */
 public class TeamMemberDTO {
 
@@ -16,8 +18,6 @@ public class TeamMemberDTO {
     private final double averageGrade;
     private final List<TaskDTO> tasks;
     private final List<String> skills;
-    private final List<Integer> grades;
-    private final List<int[]> gradeEntries;
 
     /**
      * Constructs a TeamMemberDTO with all fields.
@@ -25,23 +25,18 @@ public class TeamMemberDTO {
      * @param id           the member's database ID
      * @param name         first name
      * @param surname      last name
-     * @param averageGrade pre-calculated average grade (0 if no grades)
-     * @param tasks        list of task DTOs
+     * @param averageGrade average grade across completed tasks (0 if none graded)
+     * @param tasks        list of task DTOs (each carrying its own grade)
      * @param skills       list of skill names
-     * @param grades       list of individual grade values
-     * @param gradeEntries list of {@code int[]{gradeRowId, gradeValue}} pairs
      */
     public TeamMemberDTO(long id, String name, String surname, double averageGrade,
-                         List<TaskDTO> tasks, List<String> skills, List<Integer> grades,
-                         List<int[]> gradeEntries) {
-        this.id = id;
-        this.name = name;
-        this.surname = surname;
+                         List<TaskDTO> tasks, List<String> skills) {
+        this.id           = id;
+        this.name         = name;
+        this.surname      = surname;
         this.averageGrade = averageGrade;
-        this.tasks = List.copyOf(tasks);
-        this.skills = List.copyOf(skills);
-        this.grades = List.copyOf(grades);
-        this.gradeEntries = List.copyOf(gradeEntries);
+        this.tasks        = List.copyOf(tasks);
+        this.skills       = List.copyOf(skills);
     }
 
     /** @return the number of tasks currently in PENDING status */
@@ -68,7 +63,7 @@ public class TeamMemberDTO {
     /** @return the member's last name */
     public String getSurname() { return surname; }
 
-    /** @return the pre-calculated average grade, or 0 if no grades exist */
+    /** @return average grade across completed graded tasks, or 0 if none */
     public double getAverageGrade() { return averageGrade; }
 
     /** @return an unmodifiable list of task DTOs */
@@ -76,10 +71,4 @@ public class TeamMemberDTO {
 
     /** @return an unmodifiable list of skill names */
     public List<String> getSkills() { return skills; }
-
-    /** @return an unmodifiable list of grade values */
-    public List<Integer> getGrades() { return grades; }
-
-    /** @return an unmodifiable list of {@code int[]{gradeRowId, gradeValue}} pairs */
-    public List<int[]> getGradeEntries() { return gradeEntries; }
 }

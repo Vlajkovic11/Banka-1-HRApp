@@ -5,6 +5,7 @@ import com.example.dto.TaskDTO;
 import com.example.exception.ValidationException;
 import com.example.model.Task;
 import com.example.model.TaskStatus;
+import com.example.repository.GradeRepository;
 import com.example.repository.TaskRepository;
 import com.example.repository.TransactionManager;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,14 +31,15 @@ import static org.mockito.Mockito.*;
 class TaskServiceTest {
 
     @Mock private TaskRepository     taskRepo;
+    @Mock private GradeRepository    gradeRepo;
     @Mock private TransactionManager txManager;
 
     private TaskService service;
 
-    /** Sets up the service with a mocked repository before each test. */
+    /** Sets up the service with mocked repositories before each test. */
     @BeforeEach
     void setUp() {
-        service = new TaskService(taskRepo, txManager);
+        service = new TaskService(taskRepo, gradeRepo, txManager);
     }
 
     // ── addTask ───────────────────────────────────────────────────────────────
@@ -72,6 +74,7 @@ class TaskServiceTest {
 
     @Test
     void updateTask_updatesAllFieldsAndReturnsDTO() throws SQLException {
+        when(gradeRepo.findByTaskId(5L)).thenReturn(0);
         CreateUpdateTaskDTO dto = CreateUpdateTaskDTO.of("Updated name", "New comment", TaskStatus.COMPLETED);
 
         TaskDTO result = service.updateTask(5L, dto);
@@ -109,12 +112,54 @@ class TaskServiceTest {
         task.setStatus(TaskStatus.COMPLETED);
         task.setComment("Fixed in PR #42");
         when(taskRepo.findByMemberId(1L)).thenReturn(List.of(task));
+        when(gradeRepo.findByTaskId(3L)).thenReturn(7);
 
         List<TaskDTO> result = service.getTasksForMember(1L);
 
-        assertEquals(1,                  result.size());
-        assertEquals("Fix bug",          result.get(0).getTaskName());
+        assertEquals(1,                    result.size());
+        assertEquals("Fix bug",            result.get(0).getTaskName());
         assertEquals(TaskStatus.COMPLETED, result.get(0).getStatus());
-        assertEquals("Fixed in PR #42", result.get(0).getComment());
+        assertEquals("Fixed in PR #42",   result.get(0).getComment());
+        assertEquals(7,                    result.get(0).getGrade());
+    }
+
+    // ── gradeTask ─────────────────────────────────────────────────────────────
+
+    @Test
+    void gradeTask_withValidGrade_callsSaveOrUpdate() throws SQLException {
+        service.gradeTask(5L, 8);
+
+        verify(gradeRepo).saveOrUpdate(8, 5L);
+    }
+
+    @Test
+    void gradeTask_withMinGrade_callsSaveOrUpdate() throws SQLException {
+        service.gradeTask(1L, 1);
+
+        verify(gradeRepo).saveOrUpdate(1, 1L);
+    }
+
+    @Test
+    void gradeTask_withMaxGrade_callsSaveOrUpdate() throws SQLException {
+        service.gradeTask(1L, 10);
+
+        verify(gradeRepo).saveOrUpdate(10, 1L);
+    }
+
+    @Test
+    void gradeTask_withGradeTooHigh_throwsValidationException() {
+        assertThrows(ValidationException.class, () -> service.gradeTask(1L, 11));
+    }
+
+    @Test
+    void gradeTask_withGradeTooLow_throwsValidationException() {
+        assertThrows(ValidationException.class, () -> service.gradeTask(1L, 0));
+    }
+
+    @Test
+    void gradeTask_withTooHighGrade_doesNotCallRepository() throws SQLException {
+        assertThrows(ValidationException.class, () -> service.gradeTask(1L, 11));
+
+        verify(gradeRepo, never()).saveOrUpdate(anyInt(), anyLong());
     }
 }

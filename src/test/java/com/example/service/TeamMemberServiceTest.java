@@ -5,6 +5,8 @@ import com.example.dto.TeamMemberDTO;
 import com.example.exception.HRAppException;
 import com.example.exception.MemberNotFoundException;
 import com.example.exception.ValidationException;
+import com.example.model.Task;
+import com.example.model.TaskStatus;
 import com.example.model.TeamMember;
 import com.example.repository.GradeRepository;
 import com.example.repository.SkillRepository;
@@ -21,8 +23,6 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-
-import static org.mockito.ArgumentMatchers.anyInt;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -58,8 +58,6 @@ class TeamMemberServiceTest {
                 .when(memberRepo).save(any());
         when(taskRepo.findByMemberId(anyLong())).thenReturn(Collections.emptyList());
         when(skillRepo.findByMemberId(anyLong())).thenReturn(Collections.emptyList());
-        when(gradeRepo.findByMemberId(anyLong())).thenReturn(Collections.emptyList());
-        when(gradeRepo.findWithIdsByMemberId(anyLong())).thenReturn(Collections.emptyList());
 
         TeamMemberDTO result = service.createMember(CreateUpdateMemberDTO.of("Ana", "Jovic"));
 
@@ -95,7 +93,6 @@ class TeamMemberServiceTest {
     @Test
     void getAllMembers_returnsAllNonDeletedMembers() throws SQLException {
         TeamMemberDTO dto = new TeamMemberDTO(5L, "Marko", "Petrovic", 0.0,
-                Collections.emptyList(), Collections.emptyList(),
                 Collections.emptyList(), Collections.emptyList());
         when(memberRepo.findAllWithDetails()).thenReturn(List.of(dto));
 
@@ -114,8 +111,6 @@ class TeamMemberServiceTest {
         when(memberRepo.findById(2L)).thenReturn(Optional.of(existing));
         when(taskRepo.findByMemberId(2L)).thenReturn(Collections.emptyList());
         when(skillRepo.findByMemberId(2L)).thenReturn(Collections.emptyList());
-        when(gradeRepo.findByMemberId(2L)).thenReturn(Collections.emptyList());
-        when(gradeRepo.findWithIdsByMemberId(2L)).thenReturn(Collections.emptyList());
 
         TeamMemberDTO result = service.updateMember(2L, CreateUpdateMemberDTO.of("New", "Name"));
 
@@ -147,25 +142,6 @@ class TeamMemberServiceTest {
         verify(txManager, never()).commit();
     }
 
-    // ── addGrade ──────────────────────────────────────────────────────────────
-
-    @Test
-    void addGrade_withValidGrade_savesGrade() throws SQLException {
-        service.addGrade(1L, 8);
-
-        verify(gradeRepo).save(8, 1L);
-    }
-
-    @Test
-    void addGrade_withGradeTooHigh_throwsValidationException() {
-        assertThrows(ValidationException.class, () -> service.addGrade(1L, 11));
-    }
-
-    @Test
-    void addGrade_withGradeTooLow_throwsValidationException() {
-        assertThrows(ValidationException.class, () -> service.addGrade(1L, 0));
-    }
-
     // ── addSkill ──────────────────────────────────────────────────────────────
 
     @Test
@@ -189,62 +165,6 @@ class TeamMemberServiceTest {
         verify(skillRepo).delete("JAVA", 1L);
     }
 
-    // ── removeGrade ───────────────────────────────────────────────────────────
-
-    @Test
-    void removeGrade_delegatesToRepository() throws SQLException {
-        service.removeGrade(42);
-
-        verify(gradeRepo).deleteById(42);
-    }
-
-    // ── updateGrade ───────────────────────────────────────────────────────────
-
-    @Test
-    void updateGrade_withValidGrade_updatesGrade() throws SQLException {
-        service.updateGrade(42, 7);
-
-        verify(gradeRepo).updateById(42, 7);
-    }
-
-    @Test
-    void updateGrade_withMinGrade_updatesGrade() throws SQLException {
-        service.updateGrade(1, 1);
-
-        verify(gradeRepo).updateById(1, 1);
-    }
-
-    @Test
-    void updateGrade_withMaxGrade_updatesGrade() throws SQLException {
-        service.updateGrade(1, 10);
-
-        verify(gradeRepo).updateById(1, 10);
-    }
-
-    @Test
-    void updateGrade_withGradeTooHigh_throwsValidationException() {
-        assertThrows(ValidationException.class, () -> service.updateGrade(1, 11));
-    }
-
-    @Test
-    void updateGrade_withGradeTooLow_throwsValidationException() {
-        assertThrows(ValidationException.class, () -> service.updateGrade(1, 0));
-    }
-
-    @Test
-    void updateGrade_withTooHighGrade_doesNotCallRepository() throws SQLException {
-        assertThrows(ValidationException.class, () -> service.updateGrade(1, 11));
-
-        verify(gradeRepo, never()).updateById(anyInt(), anyInt());
-    }
-
-    @Test
-    void updateGrade_withTooLowGrade_doesNotCallRepository() throws SQLException {
-        assertThrows(ValidationException.class, () -> service.updateGrade(1, 0));
-
-        verify(gradeRepo, never()).updateById(anyInt(), anyInt());
-    }
-
     // ── getMemberById ─────────────────────────────────────────────────────────
 
     @Test
@@ -254,13 +174,11 @@ class TeamMemberServiceTest {
         when(memberRepo.findById(7L)).thenReturn(Optional.of(member));
         when(taskRepo.findByMemberId(7L)).thenReturn(Collections.emptyList());
         when(skillRepo.findByMemberId(7L)).thenReturn(Collections.emptyList());
-        when(gradeRepo.findByMemberId(7L)).thenReturn(Collections.emptyList());
-        when(gradeRepo.findWithIdsByMemberId(7L)).thenReturn(Collections.emptyList());
 
         TeamMemberDTO result = service.getMemberById(7L);
 
-        assertEquals(7L,      result.getId());
-        assertEquals("Luka",  result.getName());
+        assertEquals(7L,       result.getId());
+        assertEquals("Luka",   result.getName());
         assertEquals("Modric", result.getSurname());
     }
 
@@ -315,29 +233,6 @@ class TeamMemberServiceTest {
                 () -> service.updateMember(1L, CreateUpdateMemberDTO.of("New", "Name")));
     }
 
-    // ── addGrade ──────────────────────────────────────────────────────────────
-
-    @Test
-    void addGrade_withMinGrade_savesGrade() throws SQLException {
-        service.addGrade(1L, 1);
-
-        verify(gradeRepo).save(1, 1L);
-    }
-
-    @Test
-    void addGrade_withMaxGrade_savesGrade() throws SQLException {
-        service.addGrade(1L, 10);
-
-        verify(gradeRepo).save(10, 1L);
-    }
-
-    @Test
-    void addGrade_onSQLException_throwsHRAppException() throws SQLException {
-        doThrow(new SQLException("db error")).when(gradeRepo).save(anyInt(), anyLong());
-
-        assertThrows(HRAppException.class, () -> service.addGrade(1L, 5));
-    }
-
     // ── addSkill – null & too-long & SQLException ─────────────────────────────
 
     @Test
@@ -358,17 +253,15 @@ class TeamMemberServiceTest {
         assertThrows(HRAppException.class, () -> service.addSkill(1L, "java"));
     }
 
-    // ── grade average calculation (via getMemberById / createMember) ──────────
+    // ── grade average calculation (via getMemberById) ─────────────────────────
 
     @Test
-    void getMemberById_withNoGrades_returnsAverageZero() throws SQLException {
+    void getMemberById_withNoTasks_returnsAverageZero() throws SQLException {
         TeamMember member = new TeamMember("Test", "User");
         member.setId(10L);
         when(memberRepo.findById(10L)).thenReturn(Optional.of(member));
         when(taskRepo.findByMemberId(10L)).thenReturn(Collections.emptyList());
         when(skillRepo.findByMemberId(10L)).thenReturn(Collections.emptyList());
-        when(gradeRepo.findByMemberId(10L)).thenReturn(Collections.emptyList());
-        when(gradeRepo.findWithIdsByMemberId(10L)).thenReturn(Collections.emptyList());
 
         TeamMemberDTO result = service.getMemberById(10L);
 
@@ -376,14 +269,17 @@ class TeamMemberServiceTest {
     }
 
     @Test
-    void getMemberById_withSingleGrade_returnsCorrectAverage() throws SQLException {
+    void getMemberById_withCompletedGradedTask_returnsCorrectAverage() throws SQLException {
         TeamMember member = new TeamMember("Test", "User");
         member.setId(11L);
+        Task completedTask = new Task("Done");
+        completedTask.setId(101L);
+        completedTask.setStatus(TaskStatus.COMPLETED);
+
         when(memberRepo.findById(11L)).thenReturn(Optional.of(member));
-        when(taskRepo.findByMemberId(11L)).thenReturn(Collections.emptyList());
+        when(taskRepo.findByMemberId(11L)).thenReturn(List.of(completedTask));
         when(skillRepo.findByMemberId(11L)).thenReturn(Collections.emptyList());
-        when(gradeRepo.findByMemberId(11L)).thenReturn(List.of(7));
-        when(gradeRepo.findWithIdsByMemberId(11L)).thenReturn(Collections.emptyList());
+        when(gradeRepo.findByTaskId(101L)).thenReturn(7);
 
         TeamMemberDTO result = service.getMemberById(11L);
 
@@ -391,17 +287,40 @@ class TeamMemberServiceTest {
     }
 
     @Test
-    void getMemberById_withMultipleGrades_returnsCorrectAverage() throws SQLException {
+    void getMemberById_withMultipleCompletedGradedTasks_returnsCorrectAverage() throws SQLException {
         TeamMember member = new TeamMember("Test", "User");
         member.setId(12L);
+        Task t1 = new Task("Task 1"); t1.setId(201L); t1.setStatus(TaskStatus.COMPLETED);
+        Task t2 = new Task("Task 2"); t2.setId(202L); t2.setStatus(TaskStatus.COMPLETED);
+        Task t3 = new Task("Task 3"); t3.setId(203L); t3.setStatus(TaskStatus.COMPLETED);
+
         when(memberRepo.findById(12L)).thenReturn(Optional.of(member));
-        when(taskRepo.findByMemberId(12L)).thenReturn(Collections.emptyList());
+        when(taskRepo.findByMemberId(12L)).thenReturn(List.of(t1, t2, t3));
         when(skillRepo.findByMemberId(12L)).thenReturn(Collections.emptyList());
-        when(gradeRepo.findByMemberId(12L)).thenReturn(List.of(4, 6, 10));
-        when(gradeRepo.findWithIdsByMemberId(12L)).thenReturn(Collections.emptyList());
+        when(gradeRepo.findByTaskId(201L)).thenReturn(4);
+        when(gradeRepo.findByTaskId(202L)).thenReturn(6);
+        when(gradeRepo.findByTaskId(203L)).thenReturn(10);
 
         TeamMemberDTO result = service.getMemberById(12L);
 
         assertEquals(20.0 / 3.0, result.getAverageGrade(), 0.0001);
+    }
+
+    @Test
+    void getMemberById_pendingTaskGradeDoesNotCountTowardsAverage() throws SQLException {
+        TeamMember member = new TeamMember("Test", "User");
+        member.setId(13L);
+        Task completed = new Task("Done");  completed.setId(301L); completed.setStatus(TaskStatus.COMPLETED);
+        Task pending   = new Task("Pending"); pending.setId(302L); pending.setStatus(TaskStatus.PENDING);
+
+        when(memberRepo.findById(13L)).thenReturn(Optional.of(member));
+        when(taskRepo.findByMemberId(13L)).thenReturn(List.of(completed, pending));
+        when(skillRepo.findByMemberId(13L)).thenReturn(Collections.emptyList());
+        when(gradeRepo.findByTaskId(301L)).thenReturn(8);
+        when(gradeRepo.findByTaskId(302L)).thenReturn(2);
+
+        TeamMemberDTO result = service.getMemberById(13L);
+
+        assertEquals(8.0, result.getAverageGrade(), 0.001);
     }
 }

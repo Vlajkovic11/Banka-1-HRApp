@@ -41,7 +41,7 @@ public class CreateUpdateTaskDTO {
         if (trimmedName.length() > AppConfig.getMaxTaskNameLength()) {
             throw new ValidationException("Task name exceeds maximum length of " + AppConfig.getMaxTaskNameLength() + " characters.");
         }
-        if (trimmedComment.length() > AppConfig.getMaxSkillLength()) {
+        if (trimmedComment.length() > AppConfig.getMaxCommentLength()) {
             throw new ValidationException("Comment exceeds maximum length of " + AppConfig.getMaxCommentLength() + " characters.");
         }
         if (status == null) {

@@ -60,12 +60,11 @@ class ModelAndDtoTest {
     @Test
     void teamMemberDTO_getPendingCount_correctCount() {
         List<TaskDTO> tasks = List.of(
-                new TaskDTO(1L, "T1", TaskStatus.PENDING,   ""),
-                new TaskDTO(2L, "T2", TaskStatus.PENDING,   ""),
-                new TaskDTO(3L, "T3", TaskStatus.COMPLETED, "")
+                new TaskDTO(1L, "T1", TaskStatus.PENDING,   "", 0),
+                new TaskDTO(2L, "T2", TaskStatus.PENDING,   "", 0),
+                new TaskDTO(3L, "T3", TaskStatus.COMPLETED, "", 0)
         );
-        TeamMemberDTO dto = new TeamMemberDTO(1L, "A", "B", 0.0,
-                tasks, Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+        TeamMemberDTO dto = new TeamMemberDTO(1L, "A", "B", 0.0, tasks, Collections.emptyList());
 
         assertEquals(2, dto.getPendingCount());
     }
@@ -73,12 +72,11 @@ class ModelAndDtoTest {
     @Test
     void teamMemberDTO_getCompletedCount_correctCount() {
         List<TaskDTO> tasks = List.of(
-                new TaskDTO(1L, "T1", TaskStatus.COMPLETED, ""),
-                new TaskDTO(2L, "T2", TaskStatus.PENDING,   ""),
-                new TaskDTO(3L, "T3", TaskStatus.COMPLETED, "")
+                new TaskDTO(1L, "T1", TaskStatus.COMPLETED, "", 0),
+                new TaskDTO(2L, "T2", TaskStatus.PENDING,   "", 0),
+                new TaskDTO(3L, "T3", TaskStatus.COMPLETED, "", 0)
         );
-        TeamMemberDTO dto = new TeamMemberDTO(1L, "A", "B", 0.0,
-                tasks, Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+        TeamMemberDTO dto = new TeamMemberDTO(1L, "A", "B", 0.0, tasks, Collections.emptyList());
 
         assertEquals(2, dto.getCompletedCount());
     }
@@ -86,12 +84,11 @@ class ModelAndDtoTest {
     @Test
     void teamMemberDTO_getFailedCount_correctCount() {
         List<TaskDTO> tasks = List.of(
-                new TaskDTO(1L, "T1", TaskStatus.FAILED,    ""),
-                new TaskDTO(2L, "T2", TaskStatus.PENDING,   ""),
-                new TaskDTO(3L, "T3", TaskStatus.FAILED,    "")
+                new TaskDTO(1L, "T1", TaskStatus.FAILED,  "", 0),
+                new TaskDTO(2L, "T2", TaskStatus.PENDING, "", 0),
+                new TaskDTO(3L, "T3", TaskStatus.FAILED,  "", 0)
         );
-        TeamMemberDTO dto = new TeamMemberDTO(1L, "A", "B", 0.0,
-                tasks, Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+        TeamMemberDTO dto = new TeamMemberDTO(1L, "A", "B", 0.0, tasks, Collections.emptyList());
 
         assertEquals(2, dto.getFailedCount());
     }
@@ -99,7 +96,7 @@ class ModelAndDtoTest {
     @Test
     void teamMemberDTO_countHelpers_withNoTasks_returnZero() {
         TeamMemberDTO dto = new TeamMemberDTO(1L, "A", "B", 0.0,
-                Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+                Collections.emptyList(), Collections.emptyList());
 
         assertEquals(0, dto.getPendingCount());
         assertEquals(0, dto.getCompletedCount());
@@ -133,7 +130,7 @@ class ModelAndDtoTest {
 
     @Test
     void createUpdateTaskDTO_commentTooLong_throwsValidationException() {
-        String longComment = "A".repeat(101);
+        String longComment = "A".repeat(501);
         assertThrows(ValidationException.class,
                 () -> CreateUpdateTaskDTO.of("Task", longComment, TaskStatus.PENDING));
     }

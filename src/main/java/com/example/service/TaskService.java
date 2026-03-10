@@ -1,9 +1,12 @@
 package com.example.service;
 
+import com.example.config.AppConfig;
 import com.example.dto.CreateUpdateTaskDTO;
 import com.example.dto.TaskDTO;
 import com.example.exception.HRAppException;
+import com.example.exception.ValidationException;
 import com.example.model.Task;
+import com.example.repository.GradeRepository;
 import com.example.repository.TaskRepository;
 import com.example.repository.TransactionManager;
 import org.slf4j.Logger;
@@ -14,33 +17,36 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Service layer for task operations.
+ * Service layer for task and grade operations.
  * <p>
  * Keeps task business logic separate from team member concerns.
- * The service does not access the database directly — all DB calls
- * go through the injected {@link TaskRepository}.
+ * Grades are managed here because they belong to individual tasks.
  */
 public class TaskService {
 
     private static final Logger log = LoggerFactory.getLogger(TaskService.class);
 
     private final TaskRepository taskRepo;
+    private final GradeRepository gradeRepo;
     private final TransactionManager transactionManager;
 
     /**
-     * Constructs the service with the required repository and transaction manager
+     * Constructs the service with the required repositories and transaction manager
      * (constructor injection).
      *
-     * @param taskRepo  repository for task data
+     * @param taskRepo           repository for task data
+     * @param gradeRepo          repository for grade data
      * @param transactionManager transaction manager for multi-step operations
      */
-    public TaskService(TaskRepository taskRepo, TransactionManager transactionManager) {
-        this.taskRepo   = taskRepo;
-        this.transactionManager = transactionManager;
+    public TaskService(TaskRepository taskRepo, GradeRepository gradeRepo,
+                       TransactionManager transactionManager) {
+        this.taskRepo            = taskRepo;
+        this.gradeRepo           = gradeRepo;
+        this.transactionManager  = transactionManager;
     }
 
     /**
-     * Returns all non-deleted tasks for the given member.
+     * Returns all non-deleted tasks for the given member, each with its grades.
      *
      * @param memberId the owning member's database ID
      * @return list of task DTOs
@@ -48,8 +54,16 @@ public class TaskService {
      */
     public List<TaskDTO> getTasksForMember(long memberId) {
         try {
-            return taskRepo.findByMemberId(memberId).stream()
-                    .map(t -> new TaskDTO(t.getId(), t.getTaskName(), t.getStatus(), t.getComment()))
+            List<Task> tasks = taskRepo.findByMemberId(memberId);
+            return tasks.stream()
+                    .map(t -> {
+                        try {
+                            int grade = gradeRepo.findByTaskId(t.getId());
+                            return new TaskDTO(t.getId(), t.getTaskName(), t.getStatus(), t.getComment(), grade);
+                        } catch (SQLException e) {
+                            throw new HRAppException("Failed to load grade for task id=" + t.getId(), e);
+                        }
+                    })
                     .collect(Collectors.toList());
         } catch (SQLException e) {
             log.error("Failed to load tasks for member id={}", memberId, e);
@@ -72,7 +86,7 @@ public class TaskService {
             task.setStatus(dto.getStatus());
             taskRepo.save(task, memberId);
             log.info("Added task '{}' to member id={}", dto.getTaskName(), memberId);
-            return new TaskDTO(task.getId(), task.getTaskName(), task.getStatus(), task.getComment());
+            return new TaskDTO(task.getId(), task.getTaskName(), task.getStatus(), task.getComment(), 0);
         } catch (SQLException e) {
             log.error("Failed to add task for member id={}", memberId, e);
             throw new HRAppException("Failed to add task.", e);
@@ -95,7 +109,8 @@ public class TaskService {
             task.setStatus(dto.getStatus());
             taskRepo.update(task);
             log.info("Updated task id={}", taskId);
-            return new TaskDTO(task.getId(), task.getTaskName(), task.getStatus(), task.getComment());
+            int grade = gradeRepo.findByTaskId(taskId);
+            return new TaskDTO(task.getId(), task.getTaskName(), task.getStatus(), task.getComment(), grade);
         } catch (SQLException e) {
             log.error("Failed to update task id={}", taskId, e);
             throw new HRAppException("Failed to update task.", e);
@@ -115,6 +130,28 @@ public class TaskService {
         } catch (SQLException e) {
             log.error("Failed to delete task id={}", taskId, e);
             throw new HRAppException("Failed to delete task.", e);
+        }
+    }
+
+    /**
+     * Sets (or replaces) the grade for the given task.
+     *
+     * @param taskId the task's database ID
+     * @param grade  the grade value (must be within configured min/max range)
+     * @throws ValidationException if the grade is out of range
+     * @throws HRAppException      on database error
+     */
+    public void gradeTask(long taskId, int grade) {
+        if (grade < AppConfig.getGradeMin() || grade > AppConfig.getGradeMax()) {
+            throw new ValidationException(
+                    "Grade must be between " + AppConfig.getGradeMin() + " and " + AppConfig.getGradeMax() + ".");
+        }
+        try {
+            gradeRepo.saveOrUpdate(grade, taskId);
+            log.info("Graded task id={} with grade={}", taskId, grade);
+        } catch (SQLException e) {
+            log.error("Failed to grade task id={}", taskId, e);
+            throw new HRAppException("Failed to save grade.", e);
         }
     }
 }

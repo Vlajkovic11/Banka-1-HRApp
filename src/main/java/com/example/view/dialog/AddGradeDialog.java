@@ -6,19 +6,19 @@ import javafx.scene.control.*;
 import javafx.scene.layout.VBox;
 
 /**
- * Modal dialog for adding a grade to a team member.
+ * Modal dialog for adding a grade to a task.
  * Returns the selected grade value on confirmation, or {@code null} if the user cancels.
  */
 public class AddGradeDialog extends Dialog<Integer> {
 
     /**
-     * Constructs the dialog for the given member's name.
+     * Constructs the dialog for the given task name.
      *
-     * @param memberName the member's display name shown in the header
+     * @param taskName the task's name shown in the header
      */
-    public AddGradeDialog(String memberName) {
+    public AddGradeDialog(String taskName) {
         setTitle("Add Grade");
-        setHeaderText("Add a grade for " + memberName + ".");
+        setHeaderText("Add a grade for task: " + taskName + ".");
 
         ButtonType saveButtonType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
         getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);

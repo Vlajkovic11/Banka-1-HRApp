@@ -24,12 +24,15 @@ import javafx.stage.Stage;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.Callable;
+import java.util.function.Consumer;
+import javafx.concurrent.Task;
 
 /**
  * Main application window.
  * <p>
  * Layout: SplitPane with a member list on the left and a detail panel
- * (tabs for Tasks, Skills, Grades) on the right. All business operations
+ * (tabs for Tasks, Skills) on the right. All business operations
  * are delegated to the injected service layer — no logic lives in this class.
  */
 public class MainStage extends Stage {
@@ -49,14 +52,9 @@ public class MainStage extends Stage {
     private final ObservableList<String> skillList = FXCollections.observableArrayList();
     private ListView<String> skillListView;
 
-    // ── Right panel — grades ─────────────────────────────────────────────────
-    private final ObservableList<int[]> gradeList = FXCollections.observableArrayList();
-    private ListView<int[]> gradeListView;
-
     // ── Header labels ────────────────────────────────────────────────────────
     private Label memberHeaderLabel;
     private Label avgGradeHeaderLabel;
-    private Label avgGradeDetailLabel;
 
     /**
      * Constructs the main stage with all required services (constructor injection).
@@ -199,7 +197,7 @@ public class MainStage extends Stage {
 
         TabPane tabs = new TabPane();
         tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
-        tabs.getTabs().addAll(buildTasksTab(), buildSkillsTab(), buildGradesTab());
+        tabs.getTabs().addAll(buildTasksTab(), buildSkillsTab());
 
         VBox panel = new VBox(10, header, tabs);
         panel.setPadding(new Insets(10));
@@ -226,17 +224,29 @@ public class MainStage extends Stage {
         TableColumn<TaskDTO, String> commentCol = new TableColumn<>("Comment");
         commentCol.setCellValueFactory(d -> new SimpleStringProperty(d.getValue().getComment()));
 
-        taskTable.getColumns().addAll(nameCol, statusCol, commentCol);
+        TableColumn<TaskDTO, String> gradeCol = new TableColumn<>("Grade");
+        gradeCol.setCellValueFactory(d -> {
+            int grade = d.getValue().getGrade();
+            return new SimpleStringProperty(grade == 0 ? "—" : String.valueOf(grade));
+        });
+
+        taskTable.getColumns().addAll(nameCol, statusCol, commentCol, gradeCol);
 
         Button addBtn    = new Button("Add Task");
         Button editBtn   = new Button("Edit Task");
         Button deleteBtn = new Button("Delete Task");
+        Button gradeBtn  = new Button("Grade Task");
+
+        gradeBtn.setDisable(true);
+        taskTable.getSelectionModel().selectedItemProperty()
+                .addListener((obs, old, selected) -> gradeBtn.setDisable(selected == null));
 
         addBtn.setOnAction(e    -> handleAddTask());
         editBtn.setOnAction(e   -> handleEditTask());
         deleteBtn.setOnAction(e -> handleDeleteTask());
+        gradeBtn.setOnAction(e  -> handleGradeTask());
 
-        HBox buttons = new HBox(8, addBtn, editBtn, deleteBtn);
+        HBox buttons = new HBox(8, addBtn, editBtn, deleteBtn, gradeBtn);
         buttons.setPadding(new Insets(5, 0, 0, 0));
 
         VBox content = new VBox(8, taskTable, buttons);
@@ -270,42 +280,6 @@ public class MainStage extends Stage {
         return new Tab("Skills", content);
     }
 
-    /**
-     * Builds the Grades tab with a grade list, an average label, and add/edit/remove buttons.
-     *
-     * @return the configured {@link Tab}
-     */
-    private Tab buildGradesTab() {
-        gradeListView = new ListView<>(gradeList);
-        gradeListView.setCellFactory(lv -> new ListCell<>() {
-            @Override
-            protected void updateItem(int[] entry, boolean empty) {
-                super.updateItem(entry, empty);
-                setText(empty || entry == null ? null : String.valueOf(entry[1]));
-            }
-        });
-
-        avgGradeDetailLabel = new Label("Average: N/A");
-        avgGradeDetailLabel.setStyle("-fx-font-size: 13; -fx-font-weight: bold;");
-
-        Button addBtn    = new Button("Add Grade");
-        Button editBtn   = new Button("Edit Grade");
-        Button removeBtn = new Button("Remove Grade");
-
-        addBtn.setOnAction(e    -> handleAddGrade());
-        editBtn.setOnAction(e   -> handleEditGrade());
-        removeBtn.setOnAction(e -> handleRemoveGrade());
-
-        HBox buttons = new HBox(8, addBtn, editBtn, removeBtn);
-        buttons.setPadding(new Insets(5, 0, 0, 0));
-
-        VBox content = new VBox(8, gradeListView, avgGradeDetailLabel, buttons);
-        content.setPadding(new Insets(10));
-        VBox.setVgrow(gradeListView, Priority.ALWAYS);
-
-        return new Tab("Grades", content);
-    }
-
     // ── Data loading ──────────────────────────────────────────────────────────
 
     /**
@@ -313,13 +287,10 @@ public class MainStage extends Stage {
      */
     private void loadMembers() {
         long selectedId = getSelectedMemberId();
-        try {
-            List<TeamMemberDTO> members = memberService.getAllMembers();
+        runAsync(memberService::getAllMembers, members -> {
             memberList.setAll(members);
-        } catch (Exception e) {
-            GlobalExceptionHandler.handle(e);
-        }
-        restoreSelection(selectedId);
+            restoreSelection(selectedId);
+        });
     }
 
     /**
@@ -330,20 +301,26 @@ public class MainStage extends Stage {
         if (selected == null) return;
 
         long selectedId = selected.getId();
-        try {
-            TeamMemberDTO updated = memberService.getMemberById(selectedId);
-            // Update the member in the list
-            int index = memberList.indexOf(selected);
+        int index = memberList.indexOf(selected);
+        TaskDTO selectedTask = taskTable.getSelectionModel().getSelectedItem();
+        long selectedTaskId = selectedTask != null ? selectedTask.getId() : -1;
+
+        runAsync(() -> memberService.getMemberById(selectedId), updated -> {
             if (index >= 0) {
                 memberList.set(index, updated);
-                // Re-select the updated member in the table
                 memberTable.getSelectionModel().select(index);
-                // Refresh the detail panel with the updated data
                 onMemberSelected(updated);
+                // Restore task selection
+                if (selectedTaskId >= 0) {
+                    for (int i = 0; i < taskList.size(); i++) {
+                        if (taskList.get(i).getId() == selectedTaskId) {
+                            taskTable.getSelectionModel().select(i);
+                            break;
+                        }
+                    }
+                }
             }
-        } catch (Exception e) {
-            GlobalExceptionHandler.handle(e);
-        }
+        });
     }
 
     /**
@@ -383,27 +360,22 @@ public class MainStage extends Stage {
             avgGradeHeaderLabel.setText("");
             taskList.clear();
             skillList.clear();
-            gradeList.clear();
             return;
         }
         memberHeaderLabel.setText(member.getName() + " " + member.getSurname());
-        refreshAvgLabels(member.getAverageGrade());
+        refreshAvgLabel(member.getAverageGrade());
         taskList.setAll(member.getTasks());
         skillList.setAll(member.getSkills());
-        gradeList.setAll(member.getGradeEntries());
     }
 
     /**
-     * Updates the average grade labels in both the header and the Grades tab.
+     * Updates the average grade label in the header.
      *
      * @param avg the average grade value (0 means no grades)
      */
-    private void refreshAvgLabels(double avg) {
+    private void refreshAvgLabel(double avg) {
         String text = avg == 0 ? "N/A" : String.format("%.1f", avg);
         avgGradeHeaderLabel.setText("Avg Grade: " + text);
-        if (avgGradeDetailLabel != null) {
-            avgGradeDetailLabel.setText("Average: " + text);
-        }
     }
 
     // ── Member handlers ───────────────────────────────────────────────────────
@@ -411,16 +383,11 @@ public class MainStage extends Stage {
     /** Opens the add-member dialog and persists the result. */
     private void handleAddMember() {
         new AddEditMemberDialog(null).showAndWait().ifPresent(dto -> {
-            try {
-                TeamMemberDTO newMember = memberService.createMember(dto);
+            runAsync(() -> memberService.createMember(dto), newMember -> {
                 memberList.add(newMember);
-                // Re-select the newly created member in the table
                 memberTable.getSelectionModel().select(newMember);
-                // Refresh the detail panel with the new member's data
                 onMemberSelected(newMember);
-            } catch (Exception e) {
-                GlobalExceptionHandler.handle(e);
-            }
+            });
         });
     }
 
@@ -430,20 +397,14 @@ public class MainStage extends Stage {
         if (selected == null) { showWarning("Please select a team member to edit."); return; }
 
         new AddEditMemberDialog(selected).showAndWait().ifPresent(dto -> {
-            try {
-                TeamMemberDTO updated = memberService.updateMember(selected.getId(), dto);
-                // Update only the selected member in the list
-                int index = memberList.indexOf(selected);
+            int index = memberList.indexOf(selected);
+            runAsync(() -> memberService.updateMember(selected.getId(), dto), updated -> {
                 if (index >= 0) {
                     memberList.set(index, updated);
-                    // Re-select the updated member in the table
                     memberTable.getSelectionModel().select(index);
-                    // Refresh the detail panel with the updated data
                     onMemberSelected(updated);
                 }
-            } catch (Exception e) {
-                GlobalExceptionHandler.handle(e);
-            }
+            });
         });
     }
 
@@ -458,18 +419,14 @@ public class MainStage extends Stage {
         confirm.setTitle("Confirm Delete");
         confirm.showAndWait().ifPresent(btn -> {
             if (btn == ButtonType.YES) {
-                try {
-                    memberService.deleteMember(selected.getId());
+                runAsync(() -> { memberService.deleteMember(selected.getId()); return null; }, ignored -> {
                     memberList.remove(selected);
-                    // Select the next available member if any exist
                     if (!memberList.isEmpty()) {
                         memberTable.getSelectionModel().selectFirst();
                     } else {
                         clearDetailPanel();
                     }
-                } catch (Exception e) {
-                    GlobalExceptionHandler.handle(e);
-                }
+                });
             }
         });
     }
@@ -482,12 +439,7 @@ public class MainStage extends Stage {
         if (member == null) { showWarning("Please select a team member first."); return; }
 
         new AddEditTaskDialog(null).showAndWait().ifPresent(dto -> {
-            try {
-                taskService.addTask(member.getId(), dto);
-                refreshSelectedMember();
-            } catch (Exception e) {
-                GlobalExceptionHandler.handle(e);
-            }
+            runAsync(() -> { taskService.addTask(member.getId(), dto); return null; }, ignored -> refreshSelectedMember());
         });
     }
 
@@ -497,12 +449,7 @@ public class MainStage extends Stage {
         if (selected == null) { showWarning("Please select a task to edit."); return; }
 
         new AddEditTaskDialog(selected).showAndWait().ifPresent(dto -> {
-            try {
-                taskService.updateTask(selected.getId(), dto);
-                refreshSelectedMember();
-            } catch (Exception e) {
-                GlobalExceptionHandler.handle(e);
-            }
+            runAsync(() -> { taskService.updateTask(selected.getId(), dto); return null; }, ignored -> refreshSelectedMember());
         });
     }
 
@@ -511,12 +458,7 @@ public class MainStage extends Stage {
         TaskDTO selected = taskTable.getSelectionModel().getSelectedItem();
         if (selected == null) { showWarning("Please select a task to delete."); return; }
 
-        try {
-            taskService.deleteTask(selected.getId());
-            refreshSelectedMember();
-        } catch (Exception e) {
-            GlobalExceptionHandler.handle(e);
-        }
+        runAsync(() -> { taskService.deleteTask(selected.getId()); return null; }, ignored -> refreshSelectedMember());
     }
 
     // ── Skill handlers ────────────────────────────────────────────────────────
@@ -533,12 +475,7 @@ public class MainStage extends Stage {
 
         dialog.showAndWait().ifPresent(skill -> {
             if (!skill.trim().isEmpty()) {
-                try {
-                    memberService.addSkill(member.getId(), skill);
-                    refreshSelectedMember();
-                } catch (Exception e) {
-                    GlobalExceptionHandler.handle(e);
-                }
+                runAsync(() -> { memberService.addSkill(member.getId(), skill); return null; }, ignored -> refreshSelectedMember());
             }
         });
     }
@@ -549,60 +486,20 @@ public class MainStage extends Stage {
         String        selectedSkill = skillListView.getSelectionModel().getSelectedItem();
         if (selectedSkill == null) { showWarning("Please select a skill to remove."); return; }
 
-        try {
-            memberService.removeSkill(member.getId(), selectedSkill);
-            refreshSelectedMember();
-        } catch (Exception e) {
-            GlobalExceptionHandler.handle(e);
-        }
+        runAsync(() -> { memberService.removeSkill(member.getId(), selectedSkill); return null; }, ignored -> refreshSelectedMember());
     }
 
     // ── Grade handlers ────────────────────────────────────────────────────────
 
-    /** Opens the add-grade dialog and persists the result for the selected member. */
-    private void handleAddGrade() {
-        TeamMemberDTO member = memberTable.getSelectionModel().getSelectedItem();
-        if (member == null) { showWarning("Please select a team member first."); return; }
+    /** Opens the grade dialog for the selected task and persists the result. */
+    private void handleGradeTask() {
+        TaskDTO selectedTask = taskTable.getSelectionModel().getSelectedItem();
+        if (selectedTask == null) { showWarning("Please select a task to grade."); return; }
 
-        new AddGradeDialog(member.getName() + " " + member.getSurname())
+        new AddGradeDialog(selectedTask.getTaskName())
                 .showAndWait().ifPresent(grade -> {
-                    try {
-                        memberService.addGrade(member.getId(), grade);
-                        refreshSelectedMember();
-                    } catch (Exception e) {
-                        GlobalExceptionHandler.handle(e);
-                    }
+                    runAsync(() -> { taskService.gradeTask(selectedTask.getId(), grade); return null; }, ignored -> refreshSelectedMember());
                 });
-    }
-
-    /** Opens the edit-grade dialog for the selected grade and persists the result. */
-    private void handleEditGrade() {
-        int[] selected = gradeListView.getSelectionModel().getSelectedItem();
-        if (selected == null) { showWarning("Please select a grade to edit."); return; }
-
-        TeamMemberDTO member = memberTable.getSelectionModel().getSelectedItem();
-        new AddGradeDialog(member.getName() + " " + member.getSurname())
-                .showAndWait().ifPresent(newGrade -> {
-                    try {
-                        memberService.updateGrade(selected[0], newGrade);
-                        loadMembers();
-                    } catch (Exception e) {
-                        GlobalExceptionHandler.handle(e);
-                    }
-                });
-    }
-
-    /** Confirms and removes the selected grade. */
-    private void handleRemoveGrade() {
-        int[] selected = gradeListView.getSelectionModel().getSelectedItem();
-        if (selected == null) { showWarning("Please select a grade to remove."); return; }
-
-        try {
-            memberService.removeGrade(selected[0]);
-            loadMembers();
-        } catch (Exception e) {
-            GlobalExceptionHandler.handle(e);
-        }
     }
 
     // ── UI helpers ────────────────────────────────────────────────────────────
@@ -615,7 +512,26 @@ public class MainStage extends Stage {
         avgGradeHeaderLabel.setText("");
         taskList.clear();
         skillList.clear();
-        gradeList.clear();
+    }
+
+    /**
+     * Runs {@code dbCall} on a background thread, then invokes {@code onSuccess}
+     * on the JavaFX application thread with the result.
+     * Errors are forwarded to {@link GlobalExceptionHandler}.
+     *
+     * @param dbCall    the database operation to execute off the UI thread
+     * @param onSuccess callback executed on the FX thread when the operation succeeds
+     */
+    private <T> void runAsync(Callable<T> dbCall, Consumer<T> onSuccess) {
+        Task<T> bgTask = new Task<>() {
+            @Override
+            protected T call() throws Exception {
+                return dbCall.call();
+            }
+        };
+        bgTask.setOnSucceeded(e -> onSuccess.accept(bgTask.getValue()));
+        bgTask.setOnFailed(e -> GlobalExceptionHandler.handle(bgTask.getException()));
+        new Thread(bgTask, "db-worker").start();
     }
 
     /**

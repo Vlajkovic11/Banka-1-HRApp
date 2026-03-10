@@ -30,7 +30,6 @@ class TeamMemberServiceIntegrationTest extends IntegrationTestBase {
         assertEquals(0.0,     dto.getAverageGrade());
         assertTrue(dto.getTasks().isEmpty());
         assertTrue(dto.getSkills().isEmpty());
-        assertTrue(dto.getGrades().isEmpty());
     }
 
     @Test
@@ -180,80 +179,88 @@ class TeamMemberServiceIntegrationTest extends IntegrationTestBase {
         assertFalse(reloaded.getSkills().contains("PYTHON"));
     }
 
-    // ── addGrade / removeGrade / updateGrade ──────────────────────────────────
+    // ── gradeTask ─────────────────────────────────────────────────────────────
 
     @Test
-    void addGrade_persists_andAverageIsCorrect() {
+    void gradeTask_persists_andAverageIsCorrectForCompletedTasks() {
         TeamMemberDTO member = memberService.createMember(CreateUpdateMemberDTO.of("Grade", "User"));
 
-        memberService.addGrade(member.getId(), 8);
-        memberService.addGrade(member.getId(), 6);
+        com.example.dto.TaskDTO t1 = taskService.addTask(member.getId(),
+                com.example.dto.CreateUpdateTaskDTO.of("Task 1", "", com.example.model.TaskStatus.PENDING));
+        taskService.updateTask(t1.getId(),
+                com.example.dto.CreateUpdateTaskDTO.of("Task 1", "", com.example.model.TaskStatus.COMPLETED));
+        taskService.gradeTask(t1.getId(), 8);
+
+        com.example.dto.TaskDTO t2 = taskService.addTask(member.getId(),
+                com.example.dto.CreateUpdateTaskDTO.of("Task 2", "", com.example.model.TaskStatus.PENDING));
+        taskService.updateTask(t2.getId(),
+                com.example.dto.CreateUpdateTaskDTO.of("Task 2", "", com.example.model.TaskStatus.COMPLETED));
+        taskService.gradeTask(t2.getId(), 6);
 
         TeamMemberDTO reloaded = memberService.getMemberById(member.getId());
-        assertEquals(2, reloaded.getGrades().size());
         assertEquals(7.0, reloaded.getAverageGrade(), 0.001);
     }
 
     @Test
-    void addGrade_tooHigh_throwsValidationException() {
+    void gradeTask_tooHigh_throwsValidationException() {
         TeamMemberDTO member = memberService.createMember(CreateUpdateMemberDTO.of("A", "B"));
-        assertThrows(ValidationException.class, () -> memberService.addGrade(member.getId(), 11));
+        com.example.dto.TaskDTO task = taskService.addTask(member.getId(),
+                com.example.dto.CreateUpdateTaskDTO.of("T", "", com.example.model.TaskStatus.PENDING));
+        assertThrows(ValidationException.class, () -> taskService.gradeTask(task.getId(), 11));
     }
 
     @Test
-    void addGrade_tooLow_throwsValidationException() {
+    void gradeTask_tooLow_throwsValidationException() {
         TeamMemberDTO member = memberService.createMember(CreateUpdateMemberDTO.of("A", "B"));
-        assertThrows(ValidationException.class, () -> memberService.addGrade(member.getId(), 0));
+        com.example.dto.TaskDTO task = taskService.addTask(member.getId(),
+                com.example.dto.CreateUpdateTaskDTO.of("T", "", com.example.model.TaskStatus.PENDING));
+        assertThrows(ValidationException.class, () -> taskService.gradeTask(task.getId(), 0));
     }
 
     @Test
-    void removeGrade_removesFromHistory() {
-        TeamMemberDTO member = memberService.createMember(CreateUpdateMemberDTO.of("Grade", "Remove"));
-        memberService.addGrade(member.getId(), 9);
+    void gradeTask_onlyCompletedTasksCountTowardsAverage() {
+        TeamMemberDTO member = memberService.createMember(CreateUpdateMemberDTO.of("Grade", "Average"));
 
-        TeamMemberDTO afterAdd = memberService.getMemberById(member.getId());
-        int gradeId = afterAdd.getGradeEntries().get(0)[0];
+        // COMPLETED task — should count
+        com.example.dto.TaskDTO completed = taskService.addTask(member.getId(),
+                com.example.dto.CreateUpdateTaskDTO.of("Done", "", com.example.model.TaskStatus.PENDING));
+        taskService.updateTask(completed.getId(),
+                com.example.dto.CreateUpdateTaskDTO.of("Done", "", com.example.model.TaskStatus.COMPLETED));
+        taskService.gradeTask(completed.getId(), 8);
 
-        memberService.removeGrade(gradeId);
+        // PENDING task with grade — should NOT count towards average
+        com.example.dto.TaskDTO pending = taskService.addTask(member.getId(),
+                com.example.dto.CreateUpdateTaskDTO.of("Pending", "", com.example.model.TaskStatus.PENDING));
+        taskService.gradeTask(pending.getId(), 2);
 
-        TeamMemberDTO afterRemove = memberService.getMemberById(member.getId());
-        assertTrue(afterRemove.getGrades().isEmpty());
+        TeamMemberDTO reloaded = memberService.getMemberById(member.getId());
+        assertEquals(8.0, reloaded.getAverageGrade(), 0.001);
     }
 
     @Test
-    void updateGrade_changesValue() {
+    void gradeTask_canBeUpdatedWithSecondCall() {
         TeamMemberDTO member = memberService.createMember(CreateUpdateMemberDTO.of("Grade", "Update"));
-        memberService.addGrade(member.getId(), 5);
+        com.example.dto.TaskDTO task = taskService.addTask(member.getId(),
+                com.example.dto.CreateUpdateTaskDTO.of("Task", "", com.example.model.TaskStatus.PENDING));
 
-        TeamMemberDTO afterAdd = memberService.getMemberById(member.getId());
-        int gradeId = afterAdd.getGradeEntries().get(0)[0];
+        taskService.gradeTask(task.getId(), 5);
+        taskService.gradeTask(task.getId(), 9); // overwrite
 
-        memberService.updateGrade(gradeId, 9);
-
-        TeamMemberDTO afterUpdate = memberService.getMemberById(member.getId());
-        assertEquals(9, afterUpdate.getGrades().get(0));
-    }
-
-    @Test
-    void updateGrade_outOfRange_throwsValidationException() {
-        TeamMemberDTO member = memberService.createMember(CreateUpdateMemberDTO.of("A", "B"));
-        memberService.addGrade(member.getId(), 5);
-        TeamMemberDTO afterAdd = memberService.getMemberById(member.getId());
-        int gradeId = afterAdd.getGradeEntries().get(0)[0];
-
-        assertThrows(ValidationException.class, () -> memberService.updateGrade(gradeId, 0));
-        assertThrows(ValidationException.class, () -> memberService.updateGrade(gradeId, 11));
+        List<com.example.dto.TaskDTO> tasks = taskService.getTasksForMember(member.getId());
+        assertEquals(9, tasks.get(0).getGrade());
     }
 
     // ── getAllMembers with full details (findAllWithDetails path) ─────────────
 
     @Test
-    void getAllMembers_includesTasksSkillsAndGrades() {
+    void getAllMembers_includesTasksAndSkills() {
         TeamMemberDTO member = memberService.createMember(CreateUpdateMemberDTO.of("Full", "Details"));
-        taskService.addTask(member.getId(),
+        com.example.dto.TaskDTO task = taskService.addTask(member.getId(),
                 com.example.dto.CreateUpdateTaskDTO.of("Implement feature", "PR #1", com.example.model.TaskStatus.PENDING));
+        taskService.updateTask(task.getId(),
+                com.example.dto.CreateUpdateTaskDTO.of("Implement feature", "PR #1", com.example.model.TaskStatus.COMPLETED));
+        taskService.gradeTask(task.getId(), 7);
         memberService.addSkill(member.getId(), "JAVA");
-        memberService.addGrade(member.getId(), 7);
 
         List<TeamMemberDTO> all = memberService.getAllMembers();
 
@@ -261,7 +268,8 @@ class TeamMemberServiceIntegrationTest extends IntegrationTestBase {
         TeamMemberDTO dto = all.get(0);
         assertEquals(1, dto.getTasks().size());
         assertEquals("Implement feature", dto.getTasks().get(0).getTaskName());
-        assertEquals(com.example.model.TaskStatus.PENDING, dto.getTasks().get(0).getStatus());
+        assertEquals(com.example.model.TaskStatus.COMPLETED, dto.getTasks().get(0).getStatus());
+        assertEquals(7, dto.getTasks().get(0).getGrade());
         assertTrue(dto.getSkills().contains("JAVA"));
         assertEquals(7.0, dto.getAverageGrade(), 0.001);
     }

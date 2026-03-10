@@ -137,7 +137,7 @@ public class TeamMemberRepository {
      * @throws SQLException on database error
      */
     public List<TeamMemberDTO> findAllWithDetails() throws SQLException {
-        // SQL with LEFT JOINs to get all data in one query
+        // Grades are now joined on task_id — each grade belongs to a task, not directly to a member.
         String sql = "SELECT tm.id, tm.name, tm.surname, " +
                 "       t.id AS task_id, t.task_name, t.comment, t.status, " +
                 "       s.skill_name, " +
@@ -145,36 +145,20 @@ public class TeamMemberRepository {
                 "FROM team_members tm " +
                 "LEFT JOIN tasks t ON tm.id = t.member_id AND t.is_deleted = 0 " +
                 "LEFT JOIN skills s ON tm.id = s.member_id " +
-                "LEFT JOIN grades g ON tm.id = g.member_id " +
+                "LEFT JOIN grades g ON t.id = g.task_id " +
                 "WHERE tm.is_deleted = 0 " +
                 "ORDER BY tm.surname, tm.name, t.id, s.skill_name, g.id";
 
-        // Map to collect data per member
         Map<Long, MemberData> memberDataMap = new LinkedHashMap<>();
 
         try (Statement stmt = dbManager.getConnection().createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
-                long memberId = rs.getLong("id");
-                String name = rs.getString("name");
+                long memberId  = rs.getLong("id");
+                String name    = rs.getString("name");
                 String surname = rs.getString("surname");
-
-                // Get or create member data holder
                 MemberData data = memberDataMap.computeIfAbsent(memberId, k ->
                         new MemberData(memberId, name, surname));
-
-                // Add task if present (not null when no tasks exist)
-                long taskId = rs.getLong("task_id");
-                if (taskId != 0) {
-                    String taskName = rs.getString("task_name");
-                    if (data.tasks.stream().noneMatch(t -> t.getId() == taskId)) {
-                        Task task = new Task(taskName);
-                        task.setId(taskId);
-                        task.setComment(rs.getString("comment"));
-                        task.setStatus(TaskStatus.valueOf(rs.getString("status")));
-                        data.tasks.add(task);
-                    }
-                }
 
                 // Add skill if present
                 String skillName = rs.getString("skill_name");
@@ -182,25 +166,19 @@ public class TeamMemberRepository {
                     data.skills.add(skillName);
                 }
 
-                int gradeId = rs.getInt("grade_id");
-                int grade = rs.getInt("grade");
+                // Add task if present
+                long taskId = rs.getLong("task_id");
+                if (taskId == 0) continue;
 
-                // Check if gradeId is valid and grade is not null
-                if (gradeId != 0 && !rs.wasNull()) {
-
-                    data.grades.add(grade);
-
-                    // Add to gradeEntries if not already added
-                    boolean alreadyExists = data.gradeEntries.stream()
-                            .anyMatch(e -> e[0] == gradeId);
-                    if (!alreadyExists) {
-                        data.gradeEntries.add(new int[]{gradeId, grade});
-                    }
+                if (!data.tasksMap.containsKey(taskId)) {
+                    int grade = rs.getInt("grade");
+                    if (rs.wasNull()) grade = 0;
+                    data.tasksMap.put(taskId, new TaskData(taskId, rs.getString("task_name"),
+                            rs.getString("comment"), TaskStatus.valueOf(rs.getString("status")), grade));
                 }
             }
         }
 
-        // Convert to DTOs
         return memberDataMap.values().stream()
                 .map(this::convertToDTO)
                 .collect(Collectors.toList());
@@ -208,34 +186,50 @@ public class TeamMemberRepository {
 
     /**
      * Converts aggregated member data to a DTO.
+     * Average grade is calculated from completed tasks with a grade only.
      */
     private TeamMemberDTO convertToDTO(MemberData data) {
-        double avg = data.grades.isEmpty()
-                ? 0
-                : data.grades.stream().mapToInt(Integer::intValue).average().orElse(0);
-
-        List<TaskDTO> taskDTOs = data.tasks.stream()
-                .map(t -> new TaskDTO(t.getId(), t.getTaskName(), t.getStatus(), t.getComment()))
+        List<TaskDTO> taskDTOs = data.tasksMap.values().stream()
+                .map(td -> new TaskDTO(td.id, td.taskName, td.status, td.comment, td.grade))
                 .collect(Collectors.toList());
 
-        return new TeamMemberDTO(data.id, data.name, data.surname, avg, taskDTOs, data.skills, data.grades, data.gradeEntries);
+        double memberAvg = taskDTOs.stream()
+                .filter(t -> t.getStatus() == TaskStatus.COMPLETED && t.getGrade() > 0)
+                .mapToInt(TaskDTO::getGrade)
+                .average()
+                .orElse(0);
+
+        return new TeamMemberDTO(data.id, data.name, data.surname, memberAvg, taskDTOs, data.skills);
     }
 
-    /**
-     * Helper class to aggregate member data from JOIN results.
-     */
+    /** Holds per-task data aggregated from JOIN rows. */
+    private static class TaskData {
+        long id;
+        String taskName;
+        String comment;
+        TaskStatus status;
+        int grade;
+
+        TaskData(long id, String taskName, String comment, TaskStatus status, int grade) {
+            this.id       = id;
+            this.taskName = taskName;
+            this.comment  = comment;
+            this.status   = status;
+            this.grade    = grade;
+        }
+    }
+
+    /** Holds per-member data aggregated from JOIN rows. */
     private static class MemberData {
         long id;
         String name;
         String surname;
-        List<Task> tasks = new ArrayList<>();
+        Map<Long, TaskData> tasksMap = new LinkedHashMap<>();
         List<String> skills = new ArrayList<>();
-        List<Integer> grades = new ArrayList<>();
-        List<int[]> gradeEntries = new ArrayList<>();
 
         MemberData(long id, String name, String surname) {
-            this.id = id;
-            this.name = name;
+            this.id      = id;
+            this.name    = name;
             this.surname = surname;
         }
     }

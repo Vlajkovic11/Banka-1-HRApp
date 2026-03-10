@@ -162,34 +162,14 @@ class RepositoryIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
-    void addGrade_whenTableDropped_throwsHRAppException() throws SQLException {
+    void gradeTask_whenTableDropped_throwsHRAppException() throws SQLException {
         TeamMemberDTO member = memberService.createMember(CreateUpdateMemberDTO.of("A", "B"));
+        com.example.dto.TaskDTO task = taskService.addTask(member.getId(),
+                CreateUpdateTaskDTO.of("T", "", com.example.model.TaskStatus.PENDING));
         try (Statement s = connection.createStatement()) {
             s.execute("DROP TABLE grades");
         }
-        assertThrows(HRAppException.class, () -> memberService.addGrade(member.getId(), 5));
-    }
-
-    @Test
-    void removeGrade_whenTableDropped_throwsHRAppException() throws SQLException {
-        TeamMemberDTO member = memberService.createMember(CreateUpdateMemberDTO.of("A", "B"));
-        memberService.addGrade(member.getId(), 5);
-        int gradeId = memberService.getMemberById(member.getId()).getGradeEntries().get(0)[0];
-        try (Statement s = connection.createStatement()) {
-            s.execute("DROP TABLE grades");
-        }
-        assertThrows(HRAppException.class, () -> memberService.removeGrade(gradeId));
-    }
-
-    @Test
-    void updateGrade_whenTableDropped_throwsHRAppException() throws SQLException {
-        TeamMemberDTO member = memberService.createMember(CreateUpdateMemberDTO.of("A", "B"));
-        memberService.addGrade(member.getId(), 5);
-        int gradeId = memberService.getMemberById(member.getId()).getGradeEntries().get(0)[0];
-        try (Statement s = connection.createStatement()) {
-            s.execute("DROP TABLE grades");
-        }
-        assertThrows(HRAppException.class, () -> memberService.updateGrade(gradeId, 8));
+        assertThrows(HRAppException.class, () -> taskService.gradeTask(task.getId(), 5));
     }
 
     @Test
