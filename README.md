@@ -11,14 +11,14 @@ A desktop HR management application built with JavaFX and SQLite. Allows managin
 - **SLF4J + Logback** — logging (logs stored in `~/hrapp-logs/`)
 - **JUnit 5 + Mockito** — unit testing
 - **Maven** — build tool
-
+- **JaCoCo** — test coverage
 ## Project Structure
 
 ```
 src/
 ├── main/java/com/example/
 │   ├── Main.java                  # Entry point, manual DI wiring
-│   ├── config/AppConfig.java      # All configurable constants
+│   ├── config/AppConfig.java      # Loads configuration from app.properties
 │   ├── model/                     # Domain models (TeamMember, Task, TaskStatus)
 │   ├── dto/                       # Data transfer objects
 │   ├── repository/                # SQLite data access layer
@@ -28,6 +28,7 @@ src/
 └── main/resources/
     ├── db/migration/              # Flyway SQL migrations
     └── logback.xml                # Logging configuration
+└── test/java/com/example/
 ```
 
 ## Database Schema
@@ -59,10 +60,13 @@ The database file `hrapp.db` will be created automatically in the working direct
 ```bash
 mvn test
 ```
+```bash
+mvn verify
+```
 
 ## Configuration
 
-All constants are in `AppConfig.java`:
+All constants are in app.properties (in the working directory) and accessed via `AppConfig.java`.
 
 | Constant          | Default       | Description                   |
 |-------------------|---------------|-------------------------------|
@@ -82,12 +86,3 @@ View → Service → Repository → DatabaseManager
 ```
 
 No layer instantiates a dependency directly — all wiring happens in `Main.java`.
-
-## Future Work
-
-TODO for future contributors:
-- Consider adding pagination or filtering to member/task lists if data grows
-- Consider adding a reporting/export feature (CSV or PDF)
-- All UI changes are welcome
-- Other functional improvements are welcome if justified
-- Additional changes will likely be required after the meeting with the back lead/pm
