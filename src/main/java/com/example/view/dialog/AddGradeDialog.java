@@ -27,6 +27,15 @@ public class AddGradeDialog extends Dialog<Integer> {
         gradeSpinner.setEditable(true);
         gradeSpinner.setPrefWidth(80);
 
+        gradeSpinner.getEditor().textProperty().addListener((obs, oldVal, newVal) -> {
+            if (!newVal.matches("[0-9]*")) {
+                gradeSpinner.getEditor().setText(oldVal);
+            } else if (newVal.isEmpty()) {
+                gradeSpinner.getEditor().setText(String.valueOf(AppConfig.getGradeMin()));
+                gradeSpinner.getValueFactory().setValue(AppConfig.getGradeMin());
+            }
+        });
+
         VBox content = new VBox(10,
                 new Label("Grade (" + AppConfig.getGradeMin() + " – " + AppConfig.getGradeMax() + "):"),
                 gradeSpinner);
